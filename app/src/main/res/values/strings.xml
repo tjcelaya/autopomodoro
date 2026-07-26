@@ -1,3 +1,19 @@
 <resources>
     <string name="app_name">autopomodoro</string>
+
+    <!-- Notification channels -->
+    <string name="channel_alarms_name">Pomodoro alarms</string>
+    <string name="channel_alarms_description">Cycle-based alarm notifications</string>
+    <string name="channel_status_name">Pomodoro status</string>
+    <string name="channel_status_description">Ongoing schedule status — silent, updates as the cycle progresses</string>
+
+    <!-- Transient per-alarm notification -->
+    <string name="notif_alarm_text_next">Next at %1$s (in %2$s)</string>
+    <string name="notif_alarm_text_last_repeats">That was today\'s last alarm but the cycle repeats tomorrow</string>
+    <string name="notif_alarm_text_last_returns">That was today\'s last alarm but the cycle will return on %1$s</string>
+
+    <!-- Persistent status notification -->
+    <string name="notif_status_text_active">Active — next at %1$s (in %2$s)</string>
+    <string name="notif_status_text_cooldown">Cooldown until %1$s — next at %2$s (in %3$s)</string>
+    <string name="notif_status_text_waiting">Waiting — next at %1$s (in %2$s)</string>
 </resources>

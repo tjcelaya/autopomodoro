@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- "This was the day's last alarm" notification icon: a finish-line flag, distinct from the
+     plain bell used for every other alarm of the day. Opaque white silhouette (see
+     ic_notif_alarm.xml for why). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M14.4,6L14,4H5v17h2v-7h6.6l0.4,2h7L21,6h-6.6zM17,11h-3.6l-0.4,-2H7V6h5.6l0.4,2H17v3z" />
+</vector>
