@@ -17,4 +17,10 @@ data class PomodoroSchedule(
     val windowEnd: LocalTime,
     val intervalMinutes: Int,
     val isEnabled: Boolean = true,
+    /**
+     * Optional trailing period, in minutes, that runs after the final alarm of an active day.
+     * While it is running the schedule reads as "done for now, next one at ...".
+     * `null` (or a non-positive value) disables the cooldown phase entirely.
+     */
+    val cooldownMinutes: Int? = null,
 )
