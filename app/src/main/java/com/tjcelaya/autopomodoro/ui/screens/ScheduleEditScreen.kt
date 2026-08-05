@@ -49,6 +49,15 @@ import java.time.format.DateTimeFormatter
 private val dateFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 
+/**
+ * Parses the cooldown minutes text field into a positive [Int], or `null` if the input is
+ * blank, whitespace, non-numeric, zero, negative, or otherwise unparsable (including values
+ * too large to fit in an Int). Mirrors the "null or non-positive means no cooldown" contract
+ * documented on [PomodoroSchedule.cooldownMinutes].
+ */
+internal fun parseCooldownMinutesInput(text: String): Int? =
+    text.trim().toIntOrNull()?.takeIf { it > 0 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScheduleEditScreen(
@@ -66,6 +75,8 @@ fun ScheduleEditScreen(
     var windowEnd by remember { mutableStateOf(LocalTime.of(17, 0)) }
     var intervalMinutes by remember { mutableIntStateOf(60) }
     var isEnabled by remember { mutableStateOf(true) }
+    var cooldownEnabled by remember { mutableStateOf(false) }
+    var cooldownMinutesText by remember { mutableStateOf("") }
     var loaded by remember { mutableStateOf(isNew) }
 
     // Load existing schedule when editing
@@ -80,9 +91,15 @@ fun ScheduleEditScreen(
             windowEnd = existing.windowEnd
             intervalMinutes = existing.intervalMinutes
             isEnabled = existing.isEnabled
+            cooldownEnabled = (existing.cooldownMinutes ?: 0) > 0
+            cooldownMinutesText = existing.cooldownMinutes?.takeIf { it > 0 }?.toString() ?: ""
             loaded = true
         }
     }
+
+    // Resolved cooldown value: null whenever the toggle is off, or the field doesn't parse
+    // to a positive number. Threaded into every PomodoroSchedule(...) construction below.
+    val cooldownMinutes = if (cooldownEnabled) parseCooldownMinutesInput(cooldownMinutesText) else null
 
     // Picker dialog state
     var showDatePicker by remember { mutableStateOf(false) }
@@ -136,6 +153,7 @@ fun ScheduleEditScreen(
                                     windowStart = windowStart,
                                     windowEnd = windowEnd,
                                     intervalMinutes = intervalMinutes,
+                                    cooldownMinutes = cooldownMinutes,
                                 )
                             )
                             onBack()
@@ -229,6 +247,31 @@ fun ScheduleEditScreen(
                 singleLine = true,
             )
 
+            // Cooldown (optional) — toggle reveals the minutes field, matching how
+            // "Enabled" reads above. Off (or an unparsable/non-positive field) means no
+            // cooldown phase at all, per PomodoroSchedule.cooldownMinutes's contract.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text("Cooldown After Active Period", style = MaterialTheme.typography.bodyLarge)
+                Switch(
+                    checked = cooldownEnabled,
+                    onCheckedChange = { cooldownEnabled = it },
+                )
+            }
+            if (cooldownEnabled) {
+                OutlinedTextField(
+                    value = cooldownMinutesText,
+                    onValueChange = { cooldownMinutesText = it },
+                    label = { Text("Cooldown Minutes") },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                )
+            }
+
             // Live cycle preview — reacts to changes in cycleStartDate, daysOn, daysOff
             if (daysOn > 0 && (daysOn + daysOff) > 0) {
                 Text("Cycle Preview", style = MaterialTheme.typography.labelMedium)
@@ -242,6 +285,7 @@ fun ScheduleEditScreen(
                         windowStart = windowStart,
                         windowEnd = windowEnd,
                         intervalMinutes = intervalMinutes.coerceAtLeast(1),
+                        cooldownMinutes = cooldownMinutes,
                     ),
                 )
             }
@@ -260,6 +304,7 @@ fun ScheduleEditScreen(
                         windowEnd = windowEnd,
                         intervalMinutes = intervalMinutes.coerceAtLeast(1),
                         isEnabled = isEnabled,
+                        cooldownMinutes = cooldownMinutes,
                     )
                     viewModel.save(schedule)
                     onBack()
@@ -283,6 +328,7 @@ fun ScheduleEditScreen(
                                 windowStart = windowStart,
                                 windowEnd = windowEnd,
                                 intervalMinutes = intervalMinutes,
+                                cooldownMinutes = cooldownMinutes,
                             )
                         )
                         onBack()
