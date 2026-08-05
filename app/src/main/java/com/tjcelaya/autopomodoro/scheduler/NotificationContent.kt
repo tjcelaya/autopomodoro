@@ -5,6 +5,7 @@ import androidx.annotation.StringRes
 import com.tjcelaya.autopomodoro.R
 import com.tjcelaya.autopomodoro.data.PomodoroSchedule
 import com.tjcelaya.autopomodoro.util.DurationFormat
+import java.time.Duration
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -143,5 +144,47 @@ object NotificationContent {
         )
 
         CyclePhase.Inactive -> null
+    }
+
+    /**
+     * When the status notification should next be re-posted so its relative duration does not
+     * go stale, or `null` if there is nothing left to refresh ([CyclePhase.Inactive], or a
+     * phase whose boundary has already passed).
+     *
+     * The status notification is otherwise only rebuilt when an alarm fires, so during a long
+     * cooldown or an off-day block its "in 3d2h10m" drifts arbitrarily far from the truth while
+     * the absolute time beside it stays correct — a visibly self-contradictory notification.
+     *
+     * The cadence is proportional to how much time is actually left, because that is what
+     * decides when the rendered string next changes. [DurationFormat] drops zero units, so at a
+     * three-day remove the text only moves once an hour, while in the last quarter-hour it
+     * moves every minute. Refreshing on a flat one-minute tick would post ~4,300 redundant
+     * updates across a three-day wait to catch the handful that change anything; this posts a
+     * few dozen. The result is clamped to the phase's own boundary so a refresh never lands
+     * after the event that supersedes it.
+     */
+    fun nextStatusRefresh(phase: CyclePhase, now: LocalDateTime): LocalDateTime? {
+        val target = phase.nextAlarmOrNull ?: return null
+        val boundary = when (phase) {
+            is CyclePhase.Active -> phase.nextAlarm
+            // The cooldown lapsing is what changes this notification next, not the alarm it is
+            // counting down to — that is generally days later.
+            is CyclePhase.Cooldown -> phase.cooldownEndsAt
+            is CyclePhase.Waiting -> phase.resumesAt
+            CyclePhase.Inactive -> return null
+        }
+        if (!boundary.isAfter(now)) return null
+
+        val candidate = now.plus(refreshStep(Duration.between(now, target)))
+        return if (candidate.isBefore(boundary)) candidate else boundary
+    }
+
+    /** How long to wait before the next status refresh, given [remaining] until the alarm the
+     * notification is counting down to. Mirrors [DurationFormat]'s granularity. */
+    private fun refreshStep(remaining: Duration): Duration = when {
+        remaining > Duration.ofHours(24) -> Duration.ofHours(1)
+        remaining > Duration.ofHours(2) -> Duration.ofMinutes(15)
+        remaining > Duration.ofMinutes(15) -> Duration.ofMinutes(5)
+        else -> Duration.ofMinutes(1)
     }
 }

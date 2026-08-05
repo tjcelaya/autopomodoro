@@ -36,7 +36,7 @@
             android:exported="false" />
 
         <receiver
-            android:name=".scheduler.StatusDismissReceiver"
+            android:name=".scheduler.StatusUpdateReceiver"
             android:exported="false" />
 
         <receiver

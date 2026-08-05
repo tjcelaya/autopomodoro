@@ -208,4 +208,112 @@ class NotificationContentTest {
             assertNotEquals(id, NotificationContent.statusNotificationId(id))
         }
     }
+
+    // ── nextStatusRefresh: cadence ──
+    //
+    // The status notification is only rebuilt when something wakes the app, so without these
+    // refreshes its "in 3d2h10m" drifts while the absolute time next to it stays right. The
+    // step widens with the remaining time because that is when DurationFormat's output actually
+    // changes — a flat one-minute tick would be almost entirely redundant posts.
+
+    @Test
+    fun `inactive phase needs no refresh`() {
+        val now = LocalDateTime.of(2026, 1, 1, 12, 0)
+        assertNull(NotificationContent.nextStatusRefresh(CyclePhase.Inactive, now))
+    }
+
+    @Test
+    fun `a multi-day wait refreshes hourly`() {
+        val now = LocalDateTime.of(2026, 1, 1, 12, 0)
+        val phase = CyclePhase.Waiting(LocalDateTime.of(2026, 1, 5, 9, 0)) // ~3d21h out
+
+        assertEquals(
+            LocalDateTime.of(2026, 1, 1, 13, 0),
+            NotificationContent.nextStatusRefresh(phase, now),
+        )
+    }
+
+    @Test
+    fun `several hours out refreshes every quarter hour`() {
+        val now = LocalDateTime.of(2026, 1, 1, 12, 0)
+        val phase = CyclePhase.Waiting(LocalDateTime.of(2026, 1, 1, 17, 0)) // 5h out
+
+        assertEquals(
+            LocalDateTime.of(2026, 1, 1, 12, 15),
+            NotificationContent.nextStatusRefresh(phase, now),
+        )
+    }
+
+    @Test
+    fun `under an hour refreshes every five minutes`() {
+        val now = LocalDateTime.of(2026, 1, 1, 12, 0)
+        val phase = CyclePhase.Active(LocalDateTime.of(2026, 1, 1, 12, 40))
+
+        assertEquals(
+            LocalDateTime.of(2026, 1, 1, 12, 5),
+            NotificationContent.nextStatusRefresh(phase, now),
+        )
+    }
+
+    @Test
+    fun `the last quarter hour refreshes every minute`() {
+        val now = LocalDateTime.of(2026, 1, 1, 12, 0)
+        val phase = CyclePhase.Active(LocalDateTime.of(2026, 1, 1, 12, 10))
+
+        assertEquals(
+            LocalDateTime.of(2026, 1, 1, 12, 1),
+            NotificationContent.nextStatusRefresh(phase, now),
+        )
+    }
+
+    // ── nextStatusRefresh: clamping to the phase boundary ──
+
+    @Test
+    fun `a refresh never lands after the alarm it counts down to`() {
+        val now = LocalDateTime.of(2026, 1, 1, 12, 0, 0)
+        // Half a minute out: the one-minute step would overshoot the alarm itself.
+        val phase = CyclePhase.Active(LocalDateTime.of(2026, 1, 1, 12, 0, 30))
+
+        assertEquals(
+            LocalDateTime.of(2026, 1, 1, 12, 0, 30),
+            NotificationContent.nextStatusRefresh(phase, now),
+        )
+    }
+
+    @Test
+    fun `cooldown clamps to the cooldown ending, not to the far-off alarm`() {
+        val now = LocalDateTime.of(2026, 1, 1, 12, 0)
+        // resumesAt is days away, which alone would pick the hourly step, but the cooldown
+        // lapsing in 30 minutes is what changes this notification next.
+        val phase = CyclePhase.Cooldown(
+            resumesAt = LocalDateTime.of(2026, 1, 5, 9, 0),
+            cooldownEndsAt = LocalDateTime.of(2026, 1, 1, 12, 30),
+        )
+
+        assertEquals(
+            LocalDateTime.of(2026, 1, 1, 12, 30),
+            NotificationContent.nextStatusRefresh(phase, now),
+        )
+    }
+
+    @Test
+    fun `an already-elapsed phase needs no refresh`() {
+        // Defensive: 'now' past the recorded boundary. A real alarm is what recovers from here.
+        val phase = CyclePhase.Waiting(LocalDateTime.of(2026, 1, 2, 9, 0))
+        assertNull(NotificationContent.nextStatusRefresh(phase, LocalDateTime.of(2026, 1, 2, 9, 5)))
+    }
+
+    @Test
+    fun `every refresh is strictly in the future and never past the boundary`() {
+        val now = LocalDateTime.of(2026, 1, 1, 12, 0)
+        // Sweep the whole range of horizons, crossing every cadence tier boundary.
+        for (minutes in 1L..(60L * 72)) {
+            val target = now.plusMinutes(minutes)
+            val next = NotificationContent.nextStatusRefresh(CyclePhase.Waiting(target), now)
+
+            requireNotNull(next) { "no refresh scheduled $minutes minutes out" }
+            assertTrue("refresh at $next is not after $now", next.isAfter(now))
+            assertTrue("refresh at $next overshoots the boundary $target", !next.isAfter(target))
+        }
+    }
 }

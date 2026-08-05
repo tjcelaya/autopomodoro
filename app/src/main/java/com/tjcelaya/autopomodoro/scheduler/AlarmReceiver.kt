@@ -41,8 +41,11 @@ class AlarmReceiver : BroadcastReceiver() {
                     == PackageManager.PERMISSION_GRANTED
                 ) {
                     postAlarmNotification(context, scheduleId, schedule, now)
-                    updateStatusNotification(context, scheduleId, schedule, now)
                 }
+
+                // Intentionally outside the permission check: StatusNotifier applies its own
+                // before posting, and its clear path still has to run when posting is denied.
+                StatusNotifier.update(context, schedule, now)
 
                 // Schedule the next alarm for this schedule
                 AlarmSchedulerService.scheduleNext(context, schedule)
@@ -83,64 +86,4 @@ class AlarmReceiver : BroadcastReceiver() {
         context.getSystemService(NotificationManager::class.java).notify(scheduleId, notification)
     }
 
-    /**
-     * Posts (or clears) the persistent, low-priority status notification for [schedule], and
-     * keeps the cooldown-triggered auto-dismiss alarm (see [StatusDismissReceiver]) in sync
-     * with the phase just computed.
-     */
-    private fun updateStatusNotification(
-        context: Context,
-        scheduleId: Int,
-        schedule: PomodoroSchedule,
-        now: LocalDateTime,
-    ) {
-        val nm = context.getSystemService(NotificationManager::class.java)
-        val statusId = NotificationContent.statusNotificationId(scheduleId)
-        val phase = CycleCalculator.phaseAt(schedule, now)
-        val content = NotificationContent.forStatus(phase, now)
-
-        if (content == null) {
-            nm.cancel(statusId)
-            AlarmSchedulerService.cancelStatusDismiss(context, scheduleId)
-            return
-        }
-
-        val contentIntent = Intent(context, MainActivity::class.java).apply {
-            putExtra(MainActivity.EXTRA_SCHEDULE_ID, scheduleId)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val contentPendingIntent = PendingIntent.getActivity(
-            context,
-            STATUS_CONTENT_REQUEST_CODE_OFFSET + scheduleId,
-            contentIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-
-        val notification = NotificationCompat.Builder(context, AutopomodoroApp.STATUS_CHANNEL_ID)
-            .setSmallIcon(content.iconRes)
-            .setContentTitle(schedule.name)
-            .setContentText(context.getString(content.textRes, *content.textArgs.toTypedArray()))
-            .setContentIntent(contentPendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .build()
-        nm.notify(statusId, notification)
-
-        // Auto-dismiss: once the cooldown lapses there is nothing left to say until the next
-        // real alarm, so schedule a one-shot alarm to clear this notification then. Any other
-        // phase means no cooldown is running, so drop a stale dismiss alarm if one exists.
-        if (phase is CyclePhase.Cooldown) {
-            AlarmSchedulerService.scheduleStatusDismiss(context, scheduleId, phase.cooldownEndsAt)
-        } else {
-            AlarmSchedulerService.cancelStatusDismiss(context, scheduleId)
-        }
-    }
-
-    private companion object {
-        /** Request codes for the status notification's content [PendingIntent] live in their
-         * own band so they never collide with the transient alarm notification's content
-         * intent, which uses the schedule id directly. */
-        const val STATUS_CONTENT_REQUEST_CODE_OFFSET = 3_000_000
-    }
 }
