@@ -15,26 +15,36 @@ class AutopomodoroApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
+        createNotificationChannels()
         // Re-register alarms on every app launch as a safety net
         CoroutineScope(Dispatchers.IO).launch {
             AlarmSchedulerService.rescheduleAll(this@AutopomodoroApp)
         }
     }
 
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
+    private fun createNotificationChannels() {
+        val alarmChannel = NotificationChannel(
             CHANNEL_ID,
-            "autopomodoro",
+            getString(R.string.channel_alarms_name),
             NotificationManager.IMPORTANCE_HIGH,
         ).apply {
-            description = "Cycle-based alarm notifications"
+            description = getString(R.string.channel_alarms_description)
+        }
+        // Separate, low-importance channel for the ongoing status notification: it updates
+        // silently as the cycle progresses and must never buzz the way an actual alarm does.
+        val statusChannel = NotificationChannel(
+            STATUS_CHANNEL_ID,
+            getString(R.string.channel_status_name),
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = getString(R.string.channel_status_description)
         }
         val nm = getSystemService(NotificationManager::class.java)
-        nm.createNotificationChannel(channel)
+        nm.createNotificationChannels(listOf(alarmChannel, statusChannel))
     }
 
     companion object {
         const val CHANNEL_ID = "autopomodoro_alarms"
+        const val STATUS_CHANNEL_ID = "autopomodoro_status"
     }
 }
